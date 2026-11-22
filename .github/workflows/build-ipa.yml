@@ -45,7 +45,7 @@ permissions:
 jobs:
   build-ipa:
     name: Build & Package iOS 16+ IPA
-    runs-on: macos-14
+    runs-on: macos-latest
 
     steps:
       - name: Checkout Repository
@@ -54,20 +54,21 @@ jobs:
           submodules: recursive
           fetch-depth: 1
 
-      - name: Select Latest Stable Xcode (15 / 16+)
+      - name: Inspect Toolchain & Environment
         run: |
-          echo "=== Searching for available Xcode installations ==="
-          ls -d /Applications/Xcode*.app
-          
-          # Dynamically select highest installed Xcode version
-          LATEST_XCODE=$(find /Applications -name "Xcode*.app" -maxdepth 1 | sort -V | tail -n 1)
-          echo "Selected Xcode: $LATEST_XCODE"
-          sudo xcode-select -s "$LATEST_XCODE/Contents/Developer"
+          echo "=== macOS Runner Info ==="
+          sw_vers
+          uname -m
+          echo "=== Active Xcode Version ==="
           xcodebuild -version
+          xcodebuild -showsdks
 
-      - name: Verify CocoaPods Environment
+      - name: Setup CocoaPods
         run: |
-          which pod || brew install cocoapods
+          if ! command -v pod &> /dev/null; then
+            echo "Installing CocoaPods..."
+            brew install cocoapods || sudo gem install cocoapods
+          fi
           pod --version
 
       - name: Cache CocoaPods Dependencies
@@ -80,7 +81,7 @@ jobs:
 
       - name: Install CocoaPods
         run: |
-          pod install --repo-update
+          pod install --repo-update || pod install
 
       - name: Resolve Swift Package Dependencies
         run: |
@@ -108,21 +109,44 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
             COMPILER_INDEX_STORE_ENABLE=NO \
-            SWIFT_COMPILATION_MODE=wholemodule
+            SWIFT_COMPILATION_MODE=wholemodule \
+            ONLY_ACTIVE_ARCH=NO
 
       - name: Package & Ad-Hoc Sign IPA for iOS 16+ Sideloading
         run: |
           mkdir -p build/ipa/Payload
-          APP_PATH=$(find build/archive/VLC-Ultimate.xcarchive/Products/Applications -name "*.app" -maxdepth 1)
+          APP_PATH=$(find build/archive/VLC-Ultimate.xcarchive/Products/Applications -name "*.app" -maxdepth 1 | head -n 1)
+          
+          if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
+            echo "Error: Could not locate compiled .app bundle in archive!"
+            exit 1
+          fi
+          
           APP_NAME=$(basename "$APP_PATH")
           echo "Found compiled bundle: $APP_NAME at $APP_PATH"
           
+          # Copy to Payload folder
           cp -R "$APP_PATH" build/ipa/Payload/
           
-          # iOS 16+ requires an ad-hoc code signature to satisfy AMFI Gatekeeper on sideloaded apps
-          echo "Applying ad-hoc signature for iOS 16+ sideloading compatibility..."
-          codesign --force --deep --sign - --timestamp=none "build/ipa/Payload/$APP_NAME" || true
+          # Clean stale provision profiles to prevent signature collisions on iOS 16+
+          rm -f "build/ipa/Payload/$APP_NAME/embedded.mobileprovision"
           
+          # iOS 16+ AMFI compatibility: Sign nested frameworks & dylibs first
+          if [ -d "build/ipa/Payload/$APP_NAME/Frameworks" ]; then
+            find "build/ipa/Payload/$APP_NAME/Frameworks" -type f \( -name "*.dylib" -o -perm +111 \) | while read -r dylib; do
+              echo "Ad-hoc signing framework component: $dylib"
+              codesign --force --sign - --timestamp=none "$dylib" 2>/dev/null || true
+            done
+          fi
+          
+          # Apply ad-hoc signature to main bundle
+          echo "Applying ad-hoc signature to main application bundle: $APP_NAME..."
+          codesign --force --deep --sign - --timestamp=none "build/ipa/Payload/$APP_NAME"
+          
+          # Verify ad-hoc signature
+          codesign --verify --deep --strict "build/ipa/Payload/$APP_NAME" || true
+          
+          # Create IPA archive
           cd build/ipa
           zip -qr "VLC-Ultimate-Hikaproj.ipa" Payload
           cd ../..
@@ -132,7 +156,7 @@ jobs:
           
           echo "IPA_SIZE=$IPA_SIZE" >> $GITHUB_ENV
           echo "IPA_SHA256=$SHA256" >> $GITHUB_ENV
-          echo "Generated IPA Size: $IPA_SIZE"
+          echo "Successfully generated: build/ipa/VLC-Ultimate-Hikaproj.ipa ($IPA_SIZE)"
           echo "SHA256: $SHA256"
 
       - name: Generate Build Summary
