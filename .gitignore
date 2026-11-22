@@ -22,3 +22,4 @@ ImportedSources
 !Makefile
 .idea/
 .*.sw[nop]
+Prompt.md

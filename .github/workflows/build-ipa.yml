@@ -1,0 +1,126 @@
+name: Build VLC-iOS Ultimate IPA (Hikaproj Edition)
+
+on:
+  push:
+    branches: [ master, main ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ master, main ]
+  workflow_dispatch:
+    inputs:
+      build_configuration:
+        description: 'Build Configuration (Release or Debug)'
+        required: true
+        default: 'Release'
+        type: choice
+        options:
+          - Release
+          - Debug
+      scheme_name:
+        description: 'Target Scheme'
+        required: true
+        default: 'VLC-iOS-no-watch'
+        type: choice
+        options:
+          - VLC-iOS-no-watch
+          - VLC-iOS
+
+jobs:
+  build-ipa:
+    name: Build & Package IPA
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Select Xcode Version
+        run: |
+          sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+          xcodebuild -version
+
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: Pods
+          key: ${{ runner.os }}-pods-${{ hashFiles('Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
+
+      - name: Install CocoaPods Dependencies
+        run: |
+          pod install --repo-update
+
+      - name: Resolve Swift Package Dependencies
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -workspace "VLC.xcworkspace" \
+            -scheme "${{ github.event.inputs.scheme_name || 'VLC-iOS-no-watch' }}"
+
+      - name: Build Archive (Unsigned / Ad-Hoc Ready)
+        env:
+          CONFIG: ${{ github.event.inputs.build_configuration || 'Release' }}
+          SCHEME: ${{ github.event.inputs.scheme_name || 'VLC-iOS-no-watch' }}
+        run: |
+          mkdir -p build/archive
+          xcodebuild archive \
+            -workspace "VLC.xcworkspace" \
+            -scheme "$SCHEME" \
+            -configuration "$CONFIG" \
+            -destination "generic/platform=iOS" \
+            -archivePath "build/archive/VLC-Ultimate.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES
+
+      - name: Package Payload into IPA (Sideloadable via AltStore / TrollStore / Sideloadly)
+        run: |
+          mkdir -p build/ipa/Payload
+          APP_PATH=$(find build/archive/VLC-Ultimate.xcarchive/Products/Applications -name "*.app" -maxdepth 1)
+          echo "Found compiled app at: $APP_PATH"
+          cp -R "$APP_PATH" build/ipa/Payload/
+          cd build/ipa
+          zip -qr "VLC-Ultimate-Hikaproj.ipa" Payload
+          cd ../..
+          echo "IPA generation completed successfully: build/ipa/VLC-Ultimate-Hikaproj.ipa"
+          ls -lh build/ipa/VLC-Ultimate-Hikaproj.ipa
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VLC-Ultimate-Hikaproj-IPA
+          path: build/ipa/VLC-Ultimate-Hikaproj.ipa
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Create GitHub Release (On Tag Push)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/ipa/VLC-Ultimate-Hikaproj.ipa
+          name: "VLC Ultimate Workstation ${{ github.ref_name }} (Customized by Hikaproj)"
+          body: |
+            ## VLC Ultimate Workstation Edition
+            **Customized & Maintained by Hikaproj**
+            - Official Website: [hikaproj.com](https://hikaproj.com)
+            - Contact: [hikaproj.com/new/contact](https://hikaproj.com/new/contact)
+            - X (Twitter): [@hikaproj](https://x.com/hikaproj)
+
+            ### Highlights
+            - 36 Pro Studio DSP & Metal Compute Modules
+            - Sony Walkman DSEE Ultimate & Vinyl Processor
+            - Dolby 7.1.4ch Spatial Audio & Dialog Enhancer
+            - 2-Tier Real-Time Karaoke Pitch Bar with Match Scoring
+            - Anime4K CAS Sharpening & Retro CRT Metal Shader
+            - 2-Screen Wipe Comparison & 10x Pinch Loupe
+            - SQLite FTS5 Full-Text Subtitle & Note Search
+            - Calculator Camouflage Secret Media Vault
+            - Live Activities, Dynamic Island & NFC Tag Automation
+            - Audio-Only Ultra Power Saver Mode (<850MB Jetsam Enforced)
+          draft: false
+          prerelease: false
