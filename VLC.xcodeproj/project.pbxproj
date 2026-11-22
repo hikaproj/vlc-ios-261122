@@ -9221,7 +9221,7 @@
 				INFOPLIST_FILE = MediaLibraryWidget/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = MediaLibraryWidget;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2024 VideoLAN. All rights reserved.";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -9275,7 +9275,7 @@
 				INFOPLIST_FILE = MediaLibraryWidget/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = MediaLibraryWidget;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2024 VideoLAN. All rights reserved.";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -9326,7 +9326,7 @@
 				INFOPLIST_FILE = MediaLibraryWidget/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = MediaLibraryWidget;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2024 VideoLAN. All rights reserved.";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

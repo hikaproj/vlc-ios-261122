@@ -13,24 +13,20 @@
 import WidgetKit
 import SwiftUI
 
-struct Provider: AppIntentTimelineProvider {
-    func placeholder(in context: Context) -> SimpleEntry {
-        SimpleEntry(date: Date(), configuration: ConfigurationAppIntent())
-    }
+#if canImport(AppIntents)
+import AppIntents
+#endif
 
-    func snapshot(for configuration: ConfigurationAppIntent, in context: Context) async -> SimpleEntry {
-        SimpleEntry(date: Date(), configuration: configuration)
-    }
-
-    func timeline(for configuration: ConfigurationAppIntent, in context: Context) async -> Timeline<SimpleEntry> {
-        let entries: [SimpleEntry] = [SimpleEntry(date: Date(), configuration: configuration)]
-        return Timeline(entries: entries, policy: .atEnd)
-    }
-}
+// MARK: - Entry Data Model (iOS 16+ & iOS 17+ compatible)
 
 struct SimpleEntry: TimelineEntry {
     let date: Date
-    let configuration: ConfigurationAppIntent
+    let configurableTitle: String
+
+    init(date: Date, configurableTitle: String = "Last played") {
+        self.date = date
+        self.configurableTitle = configurableTitle
+    }
 
     var decodedData: MLWidgetBridge? = {
         guard let groupIdentifier = Bundle.main.object(forInfoDictionaryKey: "MLKitGroupIdentifier") as? String,
@@ -55,6 +51,60 @@ struct SimpleEntry: TimelineEntry {
         return Color(uiColor)
     }
 }
+
+// MARK: - Universal Timeline Provider (iOS 16+)
+
+struct Provider: TimelineProvider {
+    func placeholder(in context: Context) -> SimpleEntry {
+        SimpleEntry(date: Date(), configurableTitle: "Last played")
+    }
+
+    func getSnapshot(in context: Context, completion: @escaping (SimpleEntry) -> Void) {
+        let entry = SimpleEntry(date: Date(), configurableTitle: "Last played")
+        completion(entry)
+    }
+
+    func getTimeline(in context: Context, completion: @escaping (Timeline<SimpleEntry>) -> Void) {
+        let entries: [SimpleEntry] = [SimpleEntry(date: Date(), configurableTitle: "Last played")]
+        let timeline = Timeline(entries: entries, policy: .atEnd)
+        completion(timeline)
+    }
+}
+
+#if canImport(AppIntents)
+@available(iOS 17.0, *)
+struct AppIntentProvider: AppIntentTimelineProvider {
+    func placeholder(in context: Context) -> SimpleEntry {
+        SimpleEntry(date: Date(), configurableTitle: "Last played")
+    }
+
+    func snapshot(for configuration: ConfigurationAppIntent, in context: Context) async -> SimpleEntry {
+        SimpleEntry(date: Date(), configurableTitle: configuration.configurableTitle)
+    }
+
+    func timeline(for configuration: ConfigurationAppIntent, in context: Context) async -> Timeline<SimpleEntry> {
+        let entries: [SimpleEntry] = [SimpleEntry(date: Date(), configurableTitle: configuration.configurableTitle)]
+        return Timeline(entries: entries, policy: .atEnd)
+    }
+}
+#endif
+
+// MARK: - iOS 16 & iOS 17 Container Background Compatibility Modifier
+
+extension View {
+    @ViewBuilder
+    func widgetBackgroundCompat<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        if #available(iOS 17.0, *) {
+            self.containerBackground(for: .widget) {
+                content()
+            }
+        } else {
+            self.background(content())
+        }
+    }
+}
+
+// MARK: - Widget Entry View
 
 struct MediaLibraryWidgetEntryView: View {
     var entry: SimpleEntry
@@ -89,7 +139,7 @@ struct MediaLibraryWidgetEntryView: View {
             Image(uiImage: image ?? UIImage(named: "vlc")!)
                 .resizable()
                 .fullColorWidgetAccentedRenderingMode()
-                .clipShape(.containerRelative)
+                .clipShape(ContainerRelativeShape())
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
@@ -110,10 +160,10 @@ struct MediaLibraryWidgetEntryView: View {
             Image(uiImage: UIImage(data: data!) ?? UIImage(named: "vlc")!)
                 .resizable()
                 .fullColorWidgetAccentedRenderingMode()
-                .clipShape(.containerRelative)
+                .clipShape(ContainerRelativeShape())
                 .frame(width: 120, height: 120)
             VStack(alignment: .leading, spacing: 3) {
-                Text(entry.configuration.configurableTitle)
+                Text(entry.configurableTitle)
                     .italic()
                     .font(.system(size: 15))
                     .foregroundStyle(.white)
@@ -133,13 +183,15 @@ struct MediaLibraryWidgetEntryView: View {
     }
 }
 
+// MARK: - MediaLibraryWidget (Compatible with iOS 16.1+ and iOS 17+)
+
 struct MediaLibraryWidget: Widget {
     let kind: String = "MediaLibraryWidget"
 
     var body: some WidgetConfiguration {
-        AppIntentConfiguration(kind: kind, intent: ConfigurationAppIntent.self, provider: Provider()) { entry in
+        StaticConfiguration(kind: kind, provider: Provider()) { entry in
             MediaLibraryWidgetEntryView(entry: entry)
-                .containerBackground(for: .widget) {
+                .widgetBackgroundCompat {
                     MediaLibraryWidgetBackgroundView(entry: entry)
                 }
         }

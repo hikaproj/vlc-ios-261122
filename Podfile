@@ -45,6 +45,11 @@ post_install do |installer_representation|
       # Always set SKIP_INSTALL and other global settings
       config.build_settings['SKIP_INSTALL'] = 'YES'
       config.build_settings['CLANG_CXX_LIBRARY'] = 'libc++'
+      config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
+      config.build_settings['SWIFT_SUPPRESS_WARNINGS'] = 'YES'
+      config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+      config.build_settings['CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER'] = 'NO'
+      config.build_settings['ENABLE_STRICT_OBJC_MSGSEND'] = 'NO'
     end
   end
 end

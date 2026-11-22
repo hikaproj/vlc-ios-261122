@@ -20,7 +20,7 @@ struct MediaLibraryWidgetBackgroundView: View {
     
     var body: some View {
         ZStack {
-            if #available(iOS 26, *) {
+            if #available(iOS 16.0, *) {
                 ZStack {
                     Image(uiImage: albumArtImage)
                         .resizable()
